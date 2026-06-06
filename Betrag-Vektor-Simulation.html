@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Betrag eines Vektors im Raum</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    background: #f4f6f9; color: #1d2733;
+  }
+  #app { display: flex; height: 100%; flex-direction: row; }
+  #stage { flex: 1 1 60%; position: relative; background: #ffffff; min-width: 0; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  #hint {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    background: rgba(29,39,51,.78); color: #fff; padding: 6px 14px;
+    border-radius: 20px; font-size: 13px; pointer-events: none; white-space: nowrap;
+  }
+  #panel {
+    flex: 1 1 40%; max-width: 460px; min-width: 320px;
+    background: #fbfcfe; border-left: 1px solid #e2e8f0;
+    display: flex; flex-direction: column; padding: 22px 24px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: #64748b; font-size: 13px; margin: 0 0 16px; }
+  #steps { flex: 1; overflow-y: auto; }
+  .block {
+    background: #fff; border: 1px solid #e6ebf2; border-radius: 12px;
+    padding: 12px 14px; margin-bottom: 10px;
+    opacity: 0; transform: translateY(8px);
+    transition: opacity .35s ease, transform .35s ease;
+  }
+  .block.show { opacity: 1; transform: none; }
+  .block .lbl { font-size: 12px; font-weight: 700; letter-spacing: .04em;
+    text-transform: uppercase; color: #2563eb; margin-bottom: 6px; }
+  .block p { margin: 0 0 6px; font-size: 14px; line-height: 1.45; }
+  .calc { font-size: 17px; margin: 8px 0 2px; }
+  .calc .gen { color: #475569; }
+  .grid2 { display: grid; grid-template-columns: 1fr; gap: 2px; }
+  .final {
+    background: #ecfdf5; border-color: #6ee7b7;
+  }
+  .final .calc { font-size: 20px; font-weight: 700; color: #065f46; }
+  /* Wurzeldarstellung */
+  .sqrt { white-space: nowrap; }
+  .sqrt > .rad {
+    border-top: 2px solid currentColor; padding: 0 3px 0 1px; margin-left: -2px;
+  }
+  sup { font-size: .72em; }
+  .vec { font-weight: 700; }
+  /* Vektorpfeil ueber mehreren Buchstaben (z. B. OP) */
+  .ovec { position: relative; padding: 0 6px 0 1px; }
+  .ovec::before { content:""; position:absolute; left:0; right:5px; top:-3px;
+    border-top:1.6px solid currentColor; }
+  .ovec::after { content:""; position:absolute; right:0; top:-6px; width:0; height:0;
+    border-left:5px solid currentColor; border-top:3px solid transparent; border-bottom:3px solid transparent; }
+  #controls {
+    display: flex; align-items: center; gap: 10px; padding-top: 14px;
+    border-top: 1px solid #e2e8f0; margin-top: 10px;
+  }
+  button {
+    font-size: 15px; font-weight: 600; padding: 11px 18px; border-radius: 10px;
+    border: none; cursor: pointer; transition: background .15s, opacity .15s;
+  }
+  #next { background: #2563eb; color: #fff; flex: 1; }
+  #next:hover { background: #1d4ed8; }
+  #prev { background: #e2e8f0; color: #334155; }
+  #prev:hover { background: #cbd5e1; }
+  button:disabled { opacity: .4; cursor: default; }
+  #counter { font-size: 13px; color: #64748b; min-width: 64px; text-align: center; }
+  .legend { position: absolute; bottom: 12px; left: 14px; font-size: 12px;
+    background: rgba(255,255,255,.9); border: 1px solid #e6ebf2; border-radius: 10px;
+    padding: 8px 12px; line-height: 1.7; }
+  .legend span { display: inline-block; width: 22px; height: 3px; border-radius: 2px;
+    vertical-align: middle; margin-right: 6px; }
+  @media (max-width: 820px) {
+    #app { flex-direction: column; }
+    #panel { max-width: none; min-width: 0; border-left: none; border-top: 1px solid #e2e8f0;
+      flex: 0 0 auto; max-height: 52%; }
+    #stage { flex: 1 1 48%; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="hint">↻ Mit Finger / Maus ziehen, um das Koordinatensystem zu drehen</div>
+  </div>
+  <div id="panel">
+    <h1>Wie lang ist ein Vektor?</h1>
+    <p class="sub">Betrag von <span class="vec">v&#8407;</span> = <span class="vec ovec">OP</span> mit P(3&#8201;|&#8201;4&#8201;|&#8201;12)</p>
+    <div id="steps"></div>
+    <div id="controls">
+      <button id="prev">Zur&uuml;ck</button>
+      <span id="counter"></span>
+      <button id="next">Weiter</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// ---------- Konfiguration: fester Vektor ----------
+const Vx = 3, Vy = 4, Vz = 12;      // P(3|4|12)
+const dBase = Math.round(Math.hypot(Vx, Vy));      // = 5
+const len   = Math.round(Math.hypot(dBase, Vz));   // = 13
+
+// Markante 3D-Punkte
+const O   = {x:0,  y:0,  z:0 };
+const Px  = {x:Vx, y:0,  z:0 };   // x-Komponente
+const Pxy = {x:Vx, y:Vy, z:0 };   // Fußpunkt in x-y-Ebene
+const P   = {x:Vx, y:Vy, z:Vz};   // Spitze
+
+// Farben
+const C = {
+  axis:"#94a3b8", grid:"#e5eaf1",
+  vec:"#dc2626", cx:"#2563eb", cy:"#16a34a",
+  diag:"#ea580c", height:"#7c3aed", lbl:"#1d2733"
+};
+
+// ---------- Canvas / Projektion ----------
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+let W=0, Hgt=0, DPR=1;
+let yaw = -0.9, pitch = 0.42;   // Startblickwinkel
+let scale = 26, cx0=0, cy0=0;
+
+function resize(){
+  DPR = window.devicePixelRatio || 1;
+  const r = cv.getBoundingClientRect();
+  W = r.width; Hgt = r.height;
+  cv.width = W*DPR; cv.height = Hgt*DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  cx0 = W*0.46; cy0 = Hgt*0.60;
+  scale = Math.min(W, Hgt) / 22;
+  draw();
+}
+window.addEventListener("resize", resize);
+
+// 3D -> 2D (orthographische Projektion, z nach oben)
+function proj(p){
+  const ca=Math.cos(yaw), sa=Math.sin(yaw);
+  const X =  p.x*ca - p.y*sa;
+  const Y =  p.x*sa + p.y*ca;
+  const Z =  p.z;
+  const cb=Math.cos(pitch), sb=Math.sin(pitch);
+  const Z2 = Y*sb + Z*cb;          // vertikal (oben)
+  return { x: cx0 + X*scale, y: cy0 - Z2*scale };
+}
+
+// ---------- Zeichen-Helfer ----------
+function line(a,b,color,width,dash){
+  const A=proj(a), B=proj(b);
+  ctx.save();
+  ctx.strokeStyle=color; ctx.lineWidth=width||2;
+  ctx.setLineDash(dash||[]);
+  ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke();
+  ctx.restore();
+}
+function arrow(a,b,color,width){
+  const A=proj(a), B=proj(b);
+  ctx.save();
+  ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=width||3;
+  ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.stroke();
+  const ang=Math.atan2(B.y-A.y, B.x-A.x), s=11;
+  ctx.beginPath();
+  ctx.moveTo(B.x,B.y);
+  ctx.lineTo(B.x-s*Math.cos(ang-0.4), B.y-s*Math.sin(ang-0.4));
+  ctx.lineTo(B.x-s*Math.cos(ang+0.4), B.y-s*Math.sin(ang+0.4));
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+function dot(p,color,r){
+  const A=proj(p);
+  ctx.fillStyle=color; ctx.beginPath(); ctx.arc(A.x,A.y,r||4,0,7); ctx.fill();
+}
+function label(p, text, color, dx, dy){
+  const A=proj(p);
+  ctx.save();
+  ctx.font="600 14px -apple-system, Segoe UI, Arial";
+  ctx.fillStyle=color; ctx.strokeStyle="rgba(255,255,255,.92)"; ctx.lineWidth=4;
+  ctx.lineJoin="round";
+  ctx.strokeText(text, A.x+(dx||0), A.y+(dy||0));
+  ctx.fillText(text, A.x+(dx||0), A.y+(dy||0));
+  ctx.restore();
+}
+// Punkt zwischen a und b (für Streckenbeschriftung)
+function mid(a,b){ return {x:(a.x+b.x)/2, y:(a.y+b.y)/2, z:(a.z+b.z)/2}; }
+
+// rechter-Winkel-Markierung in der Ebene von Punkten (eckpunkt c, schenkel zu a und b)
+function rightAngle(c,a,b,color){
+  // Einheitsrichtungen in 3D, kleine Markierung
+  const u=norm(sub(a,c)), v=norm(sub(b,c)), s=0.7;
+  const p1={x:c.x+u.x*s, y:c.y+u.y*s, z:c.z+u.z*s};
+  const p3={x:c.x+v.x*s, y:c.y+v.y*s, z:c.z+v.z*s};
+  const p2={x:p1.x+v.x*s, y:p1.y+v.y*s, z:p1.z+v.z*s};
+  ctx.save(); ctx.strokeStyle=color||"#64748b"; ctx.lineWidth=1.5; ctx.setLineDash([]);
+  const A=proj(p1),B=proj(p2),Cc=proj(p3);
+  ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.lineTo(Cc.x,Cc.y); ctx.stroke();
+  ctx.restore();
+}
+function sub(a,b){return {x:a.x-b.x,y:a.y-b.y,z:a.z-b.z};}
+function norm(a){const m=Math.hypot(a.x,a.y,a.z)||1;return {x:a.x/m,y:a.y/m,z:a.z/m};}
+
+// ---------- Hauptzeichnung ----------
+let step = 0;
+const MAX = 5;
+
+function draw(){
+  ctx.clearRect(0,0,W,Hgt);
+
+  // Bodengitter (x-y-Ebene)
+  const g=Math.max(Vx,Vy)+1;
+  for(let i=0;i<=g;i++){
+    line({x:i,y:0,z:0},{x:i,y:g,z:0}, C.grid,1);
+    line({x:0,y:i,z:0},{x:g,y:i,z:0}, C.grid,1);
+  }
+
+  // Achsen
+  const ax=Math.max(Vx,Vy,1)+2, az=Vz+2;
+  arrow(O,{x:ax,y:0,z:0}, C.axis,2);
+  arrow(O,{x:0,y:ax,z:0}, C.axis,2);
+  arrow(O,{x:0,y:0,z:az},C.axis,2);
+  label({x:ax,y:0,z:0},"x",C.axis,4,4);
+  label({x:0,y:ax,z:0},"y",C.axis,4,4);
+  label({x:0,y:0,z:az},"z",C.axis,6,0);
+
+  // Schritt 3: stehendes Dreieck (Boden-Diagonale + Höhe) – zuerst, liegt hinten
+  if(step>=3){
+    line(Pxy,P, C.height,3);                 // Höhe z
+    label(mid(Pxy,P), "z = "+Vz, C.height, 8, 4);
+    rightAngle(Pxy, Pxy_floorDir(), P, C.height);
+  }
+
+  // Schritt 1: x- und y-Komponente (Bodendreieck)
+  if(step>=1){
+    line(O,Px,  C.cx,3);
+    line(Px,Pxy,C.cy,3);
+    label(mid(O,Px),  "x = "+Vx, C.cx, 0, 18);
+    label(mid(Px,Pxy),"y = "+Vy, C.cy, 8, 4);
+    rightAngle(Px, O, Pxy, "#64748b");
+  }
+
+  // Schritt 2: Boden-Diagonale d
+  if(step>=2){
+    line(O,Pxy, C.diag,3, step<3?[]:[]);
+    label(mid(O,Pxy), "d = "+dBase, C.diag, -6, 16);
+  }
+
+  // Vektor v (immer)
+  arrow(O,P, C.vec,4);
+  label(mid(O,P), "v⃗", C.vec, -22, -6);
+
+  // Punkte
+  dot(O,"#334155",4);
+  dot(P,C.vec,5);
+  label(P, "P(3|4|12)", C.lbl, 10, -8);
+  label(O, "O", C.lbl, -16, 6);
+
+  // Bei letztem Schritt: Betrag an den Vektor schreiben
+  if(step>=4){
+    label(mid(O,P), "|v⃗| = "+len, C.vec, -64, 14);
+  }
+}
+// Hilfsrichtung für rechten Winkel an Pxy (entlang Boden-Diagonale)
+function Pxy_floorDir(){ return O; }
+
+// ---------- Textpanel ----------
+function sqrt(inner){ return '<span class="sqrt">&radic;<span class="rad">'+inner+'</span></span>'; }
+const sq = '<sup>2</sup>';
+
+const BLOCKS = [
+  { lbl:"Aufgabe",
+    html:`<p>Gegeben ist der Vektor <span class="vec">v&#8407;</span> vom Ursprung <b>O</b> zum
+          Punkt <b>P(3&#8201;|&#8201;4&#8201;|&#8201;12)</b>. Gesucht ist seine L&auml;nge,
+          der <b>Betrag</b> |v&#8407;|.</p>` },
+
+  { lbl:"Schritt 1 &middot; Bodendreieck",
+    html:`<p>Die <b style="color:${C.cx}">x</b>- und die <b style="color:${C.cy}">y</b>-Komponente
+          spannen in der x&#8209;y&#8209;Ebene ein <b>rechtwinkliges Dreieck</b> auf.</p>` },
+
+  { lbl:"Schritt 2 &middot; 1. Pythagoras",
+    html:`<p>Die Diagonale <b style="color:${C.diag}">d</b> ist die Hypotenuse dieses Bodendreiecks:</p>
+          <div class="grid2">
+            <div class="calc gen">d = ${sqrt('x'+sq+' + y'+sq)}</div>
+            <div class="calc">= ${sqrt('3'+sq+' + 4'+sq)} = ${sqrt('25')} = <b>${dBase}</b></div>
+          </div>` },
+
+  { lbl:"Schritt 3 &middot; Aufrichten",
+    html:`<p>Die <b style="color:${C.height}">z</b>-Komponente steht senkrecht auf der Ebene.
+          Mit der Diagonale <b style="color:${C.diag}">d</b> bildet sie ein <b>zweites</b>
+          rechtwinkliges Dreieck. Seine Hypotenuse ist <span class="vec">v&#8407;</span> selbst.</p>` },
+
+  { lbl:"Schritt 4 &middot; 2. Pythagoras",
+    html:`<p>Jetzt liefert Pythagoras den Betrag:</p>
+          <div class="grid2">
+            <div class="calc gen">|v&#8407;| = ${sqrt('d'+sq+' + z'+sq)}</div>
+            <div class="calc">= ${sqrt('5'+sq+' + 12'+sq)} = ${sqrt('169')} = <b>${len}</b></div>
+          </div>` },
+
+  { lbl:"Schritt 5 &middot; Zusammenf&uuml;hren", final:true,
+    html:`<p>Wegen d${sq} = x${sq} + y${sq} k&ouml;nnen wir einsetzen und erhalten die <b>Formel f&uuml;r den Betrag</b>:</p>
+          <div class="calc gen">|v&#8407;| = ${sqrt('x'+sq+' + y'+sq+' + z'+sq)}</div>
+          <div class="calc">= ${sqrt('3'+sq+' + 4'+sq+' + 12'+sq)} = ${sqrt('169')} = <b>${len}</b></div>` }
+];
+
+const stepsEl = document.getElementById("steps");
+BLOCKS.forEach((b,i)=>{
+  const d=document.createElement("div");
+  d.className="block"+(b.final?" final":"");
+  d.innerHTML='<div class="lbl">'+b.lbl+'</div>'+b.html;
+  d.dataset.i=i;
+  stepsEl.appendChild(d);
+});
+
+const nextB=document.getElementById("next");
+const prevB=document.getElementById("prev");
+const counter=document.getElementById("counter");
+
+function render(){
+  document.querySelectorAll(".block").forEach(el=>{
+    el.classList.toggle("show", (+el.dataset.i)<=step);
+  });
+  // sichtbaren Block ins Bild scrollen
+  const cur=stepsEl.querySelector('.block[data-i="'+step+'"]');
+  if(cur) cur.scrollIntoView({behavior:"smooth", block:"nearest"});
+  prevB.disabled = step===0;
+  nextB.textContent = step>=MAX ? "Fertig ✓" : "Weiter";
+  nextB.disabled = step>=MAX;
+  counter.textContent = "Schritt "+step+" / "+MAX;
+  draw();
+}
+nextB.onclick=()=>{ if(step<MAX){ step++; render(); } };
+prevB.onclick=()=>{ if(step>0){ step--; render(); } };
+document.addEventListener("keydown",e=>{
+  if(e.key==="ArrowRight"||e.key===" ") nextB.onclick();
+  if(e.key==="ArrowLeft") prevB.onclick();
+});
+
+// ---------- Drehen ----------
+let dragging=false, lx=0, ly=0;
+function down(x,y){ dragging=true; lx=x; ly=y; }
+function move(x,y){
+  if(!dragging) return;
+  yaw   += (x-lx)*0.01;
+  pitch += (y-ly)*0.01;
+  pitch = Math.max(-0.05, Math.min(1.45, pitch));
+  lx=x; ly=y; draw();
+}
+function up(){ dragging=false; }
+cv.addEventListener("mousedown",e=>down(e.clientX,e.clientY));
+window.addEventListener("mousemove",e=>move(e.clientX,e.clientY));
+window.addEventListener("mouseup",up);
+cv.addEventListener("touchstart",e=>{const t=e.touches[0];down(t.clientX,t.clientY);},{passive:true});
+cv.addEventListener("touchmove",e=>{const t=e.touches[0];move(t.clientX,t.clientY);e.preventDefault();},{passive:false});
+cv.addEventListener("touchend",up);
+
+resize();
+render();
+</script>
+</body>
+</html>
